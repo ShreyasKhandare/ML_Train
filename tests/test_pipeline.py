@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
+import tempfile
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -22,6 +23,24 @@ from src.data.validator import DataValidator
 from src.preprocessing.pipeline import PreprocessingPipeline
 from src.models.trainer import ModelTrainer
 from src.models.evaluator import ModelEvaluator
+
+# ============================================================================
+# FIXTURES
+# ============================================================================
+
+@pytest.fixture
+def temp_csv_file():
+    """Create a temporary CSV file for testing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = Path(tmpdir) / "data.csv"
+        test_data = pd.DataFrame({
+            'feature_1': [100.5, 102.3, 98.7],
+            'feature_2': [50.2, 51.5, 49.8],
+            'feature_3': ['A', 'B', 'A'],
+            'target': [1, 1, 0]
+        })
+        test_data.to_csv(csv_path, index=False)
+        yield tmpdir, csv_path
 
 # ============================================================================
 # DATA LOADER TESTS
@@ -40,9 +59,19 @@ def test_data_loader_get_data():
     """Test unified get_data interface."""
     loader = DataLoader()
     data = loader.get_data(source='api', n_samples=100)
-    
+
     assert len(data) == 100
     assert data['target'].isin([0, 1]).all(), "Target should be binary"
+
+def test_data_loader_csv(temp_csv_file):
+    """Test CSV loading from temporary file."""
+    tmpdir, csv_path = temp_csv_file
+    loader = DataLoader(raw_data_dir=tmpdir)
+    data = loader.load_csv("data.csv")
+
+    assert len(data) == 3, "Should load 3 rows"
+    assert 'target' in data.columns, "Should have target column"
+    assert set(data.columns) == {'feature_1', 'feature_2', 'feature_3', 'target'}
 
 # ============================================================================
 # VALIDATOR TESTS
