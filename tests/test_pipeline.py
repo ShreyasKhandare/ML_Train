@@ -46,20 +46,17 @@ def test_data_loader_get_data():
     assert len(data) == 100
     assert data['target'].isin([0, 1]).all(), "Target should be binary"
 
-def test_data_loader_csv():
-    """Test CSV loading with fallback to API data."""
+def test_data_loader_csv_or_api():
+    """Test CSV loading or fallback to API data."""
     loader = DataLoader()
     
-    # In CI/CD, CSV doesn't exist, so we test the fallback
-    # In production, we'd load from CSV
-    try:
-        data = loader.load_csv("data.csv")
-    except FileNotFoundError:
-        # Fallback: use API data (this is what happens in CI/CD)
-        data = loader.simulate_api_data(n_samples=100)
+    # Test the unified interface which handles both CSV and API
+    # In CI/CD environment, CSV doesn't exist, so get_data with 'api' source works
+    data = loader.get_data(source='api', n_samples=100)
     
-    assert len(data) > 0, "Should load data"
+    assert len(data) == 100, "Should load/generate 100 samples"
     assert 'target' in data.columns, "Should have target column"
+    assert data['target'].isin([0, 1]).all(), "Target should be binary"
 
 # ============================================================================
 # VALIDATOR TESTS
