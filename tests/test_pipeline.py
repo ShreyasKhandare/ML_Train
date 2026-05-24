@@ -13,6 +13,8 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
+import tempfile
+import os
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -47,10 +49,25 @@ def test_data_loader_get_data():
 def test_data_loader_csv():
     """Test CSV loading from existing file."""
     loader = DataLoader()
-    data = loader.load_csv("data.csv")
     
-    assert len(data) > 0, "Should load data"
-    assert 'target' in data.columns, "Should have target column"
+    # Create temporary test data
+    test_data = pd.DataFrame({
+        'feature_1': [1.0, 2.0, 3.0],
+        'feature_2': [4.0, 5.0, 6.0],
+        'feature_3': ['A', 'B', 'C'],
+        'target': [0, 1, 0]
+    })
+    
+    # Create temp directory and save CSV
+    with tempfile.TemporaryDirectory() as tmpdir:
+        csv_path = os.path.join(tmpdir, "data.csv")
+        test_data.to_csv(csv_path, index=False)
+        
+        # Now test loading
+        data = loader.load_csv(csv_path)
+        
+        assert len(data) > 0, "Should load data"
+        assert 'target' in data.columns, "Should have target column"
 
 # ============================================================================
 # VALIDATOR TESTS
