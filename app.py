@@ -11,12 +11,22 @@ from datetime import datetime
 import sys
 from pathlib import Path
 
+# Disable Prefect server initialization - we're running in serverless mode
+os.environ['PREFECT_HOME'] = '/tmp/prefect'
+os.environ['PREFECT_API_ENABLE_SERVER'] = 'false'
+os.environ['PREFECT_LOGGING_LEVEL'] = 'WARNING'
+
 # Create necessary directories
 Path("data/raw").mkdir(parents=True, exist_ok=True)
 Path("models").mkdir(parents=True, exist_ok=True)
 Path("logs").mkdir(parents=True, exist_ok=True)
 
-from src.orchestration.workflow import ml_pipeline
+try:
+    from src.orchestration.workflow import ml_pipeline
+except Exception as e:
+    print(f"Warning: Could not import ml_pipeline: {e}")
+    print("Pipeline endpoint will not be available")
+    ml_pipeline = None
 
 app = Flask(__name__)
 
@@ -32,6 +42,13 @@ def health():
 @app.route('/run', methods=['POST'])
 def run_pipeline():
     """Run the ML pipeline and return results."""
+    if ml_pipeline is None:
+        return jsonify({
+            'status': 'error',
+            'error': 'Pipeline module not available. Try /health for status.',
+            'timestamp': datetime.now().isoformat()
+        }), 503
+
     try:
         print("\n" + "=" * 70)
         print("ML_Train: Production ML Pipeline Orchestration")
