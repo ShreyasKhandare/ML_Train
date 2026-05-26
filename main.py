@@ -22,11 +22,12 @@ Path("data/raw").mkdir(parents=True, exist_ok=True)
 Path("models").mkdir(parents=True, exist_ok=True)
 Path("logs").mkdir(parents=True, exist_ok=True)
 
-# Prefect configuration for deployment
+# Prefect configuration - use LOCAL server (no cloud connection)
+os.environ['PREFECT_API_URL'] = 'http://localhost:4200/api'
 os.environ['PREFECT_TELEMETRY_ENABLED'] = 'false'
 os.environ['PREFECT_LOGGING_LEVEL'] = 'INFO'
 
-# Import and run pipeline
+# Import pipeline
 from src.orchestration.workflow import ml_pipeline
 
 if __name__ == "__main__":
@@ -35,14 +36,16 @@ if __name__ == "__main__":
     print("=" * 70 + "\n")
     
     try:
-        # Run Prefect flow
+        # Run Prefect flow (locally)
         result = ml_pipeline()
         
         print("\n" + "=" * 70)
         print(f"✓ Pipeline completed!")
         print(f"  Run ID: {result['run_id']}")
         print(f"  Status: {result['status']}")
-        print(f"  Metrics: {result['metrics']}")
+        if 'metrics' in result:
+            metrics = result['metrics']
+            print(f"  Accuracy: {metrics.get('accuracy', 'N/A'):.4f}")
         print("=" * 70 + "\n")
         
         sys.exit(0)
