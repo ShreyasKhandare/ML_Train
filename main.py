@@ -14,12 +14,17 @@ Run: python main.py
 """
 
 import sys
+import os
 from pathlib import Path
 
 # Create necessary directories
 Path("data/raw").mkdir(parents=True, exist_ok=True)
 Path("models").mkdir(parents=True, exist_ok=True)
 Path("logs").mkdir(parents=True, exist_ok=True)
+
+# Prefect configuration for deployment
+os.environ['PREFECT_TELEMETRY_ENABLED'] = 'false'
+os.environ['PREFECT_LOGGING_LEVEL'] = 'INFO'
 
 # Import and run pipeline
 from src.orchestration.workflow import ml_pipeline
