@@ -3,7 +3,7 @@
 End-to-end ML training pipeline demonstrating production-grade engineering practices.
 
 [![Tests Passing](https://github.com/ShreyasKhandare/ML_Train/actions/workflows/test.yml/badge.svg)](https://github.com/ShreyasKhandare/ML_Train/actions)
-[![Deployed on Railway](https://img.shields.io/badge/Deployed-Railway-0B0D0E?style=flat&logo=railway)](https://mltrain-production.up.railway.app)
+
 
 ## Overview
 
