@@ -1,6 +1,6 @@
 """
-Flask API wrapper for ML_Train pipeline.
-Runs the ML pipeline on demand via HTTP endpoints.
+ML_Train Flask API - Minimal, production-ready version
+No Prefect overhead - direct ML pipeline execution
 """
 
 import os
@@ -8,27 +8,27 @@ import json
 import traceback
 from flask import Flask, jsonify, request
 from datetime import datetime
-import sys
 from pathlib import Path
-
-# Disable Prefect server initialization - we're running in serverless mode
-os.environ['PREFECT_HOME'] = '/tmp/prefect'
-os.environ['PREFECT_API_ENABLE_SERVER'] = 'false'
-os.environ['PREFECT_LOGGING_LEVEL'] = 'WARNING'
+import uuid
 
 # Create necessary directories
 Path("data/raw").mkdir(parents=True, exist_ok=True)
 Path("models").mkdir(parents=True, exist_ok=True)
 Path("logs").mkdir(parents=True, exist_ok=True)
 
-try:
-    from src.orchestration.workflow import ml_pipeline
-except Exception as e:
-    print(f"Warning: Could not import ml_pipeline: {e}")
-    print("Pipeline endpoint will not be available")
-    ml_pipeline = None
-
 app = Flask(__name__)
+
+# Import ML components (no Prefect)
+try:
+    from src.data.loader import DataLoader
+    from src.data.validator import DataValidator
+    from src.preprocessing.pipeline import PreprocessingPipeline
+    from src.models.trainer import ModelTrainer
+    from src.models.evaluator import ModelEvaluator
+    ML_AVAILABLE = True
+except Exception as e:
+    print(f"Warning: ML components unavailable: {e}")
+    ML_AVAILABLE = False
 
 @app.route('/', methods=['GET'])
 def health():
@@ -37,39 +37,109 @@ def health():
         'status': 'healthy',
         'service': 'ML_Train Pipeline API',
         'timestamp': datetime.now().isoformat()
-    })
+    }), 200
+
+@app.route('/status', methods=['GET'])
+def status():
+    """Get service status."""
+    return jsonify({
+        'service': 'ML_Train Pipeline API',
+        'status': 'running',
+        'ml_available': ML_AVAILABLE,
+        'endpoints': {
+            'GET /': 'Health check',
+            'GET /status': 'Service status',
+            'POST /run': 'Execute ML pipeline'
+        },
+        'timestamp': datetime.now().isoformat()
+    }), 200
 
 @app.route('/run', methods=['POST'])
 def run_pipeline():
-    """Run the ML pipeline and return results."""
-    if ml_pipeline is None:
+    """Execute ML pipeline directly (no Prefect overhead)."""
+    if not ML_AVAILABLE:
         return jsonify({
             'status': 'error',
-            'error': 'Pipeline module not available. Try /health for status.',
+            'error': 'ML components not available',
             'timestamp': datetime.now().isoformat()
         }), 503
 
     try:
-        print("\n" + "=" * 70)
-        print("ML_Train: Production ML Pipeline Orchestration")
-        print("=" * 70 + "\n")
+        print("\n" + "="*70)
+        print("ML_Train Pipeline - Direct Execution")
+        print("="*70 + "\n")
 
-        result = ml_pipeline()
+        run_id = str(uuid.uuid4())[:8]
+
+        # Step 1: Load data
+        print("📥 Loading data...")
+        loader = DataLoader()
+        try:
+            data = loader.load_csv("data.csv")
+            print(f"   ✓ Loaded from CSV: {len(data)} rows")
+        except FileNotFoundError:
+            print("   ℹ CSV not found, using simulated API data")
+            data = loader.simulate_api_data(n_samples=200)
+            print(f"   ✓ Generated API data: {len(data)} rows")
+
+        # Step 2: Validate
+        print("✔️  Validating data...")
+        validator = DataValidator(data)
+        validation = validator.validate()
+        if validation['status'] == 'invalid':
+            raise ValueError(f"Validation failed: {validation['errors']}")
+        print(f"   ✓ Validation passed")
+
+        # Step 3: Preprocess
+        print("🔧 Preprocessing features...")
+        X = data.drop('target', axis=1)
+        y = data['target']
+        pipeline = PreprocessingPipeline()
+        X_processed = pipeline.fit_transform(X)
+        pipeline.save("models/preprocessor.pkl")
+        print(f"   ✓ Preprocessing done: {X_processed.shape}")
+
+        # Step 4: Train
+        print("🤖 Training model...")
+        trainer = ModelTrainer(n_estimators=100, max_depth=5, learning_rate=0.1)
+        result = trainer.train(X_processed, y, test_size=0.2, verbose=False)
+        trainer.save("models/model.pkl")
+        print(f"   ✓ Model trained")
+
+        # Step 5: Evaluate
+        print("📊 Evaluating model...")
+        model = result['model']
+        X_test = result['X_test']
+        y_test = result['y_test']
+        evaluator = ModelEvaluator(model)
+        metrics = evaluator.evaluate(X_test, y_test)
+        print(f"   ✓ Accuracy: {metrics['accuracy']:.4f}")
+
+        # Step 6: Drift check
+        print("🔍 Checking for data drift...")
+        X_train = result['X_train']
+        drift_result = evaluator.detect_drift(X_train, X_test)
+        if drift_result['drift_detected']:
+            print(f"   ⚠️  Drift detected")
+        else:
+            print(f"   ✓ No drift detected")
+
+        print("\n" + "="*70)
+        print(f"✅ Pipeline completed! Run: {run_id}")
+        print("="*70 + "\n")
 
         return jsonify({
             'status': 'success',
-            'run_id': result['run_id'],
-            'pipeline_status': result['status'],
-            'metrics': result['metrics'],
+            'run_id': run_id,
+            'metrics': metrics,
+            'drift_detected': drift_result['drift_detected'],
             'timestamp': datetime.now().isoformat()
         }), 200
 
     except Exception as e:
-        print("\n" + "=" * 70)
-        print(f"❌ Pipeline failed!")
-        print(f"  Error: {str(e)}")
-        print(traceback.format_exc())
-        print("=" * 70 + "\n")
+        print("\n" + "="*70)
+        print(f"❌ Pipeline failed: {str(e)}")
+        print("="*70 + "\n")
 
         return jsonify({
             'status': 'error',
@@ -78,22 +148,15 @@ def run_pipeline():
             'timestamp': datetime.now().isoformat()
         }), 500
 
-@app.route('/status', methods=['GET'])
-def status():
-    """Get pipeline status info."""
-    return jsonify({
-        'service': 'ML_Train Pipeline API',
-        'version': '1.0.0',
-        'status': 'running',
-        'endpoints': {
-            '/': 'Health check',
-            '/run': 'Execute ML pipeline (POST)',
-            '/status': 'Get service status (GET)'
-        },
-        'timestamp': datetime.now().isoformat()
-    })
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'error': 'Endpoint not found. Use GET /status for available endpoints'}), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    # Use Flask's production-ready server for demo
+    print(f"Starting ML_Train API on port {port}...")
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
